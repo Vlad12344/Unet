@@ -3,24 +3,29 @@ import torchvision
 import numpy as np
 from PIL import Image
 from torch.utils.data.dataset import Dataset
+from torchvision.transforms import ToTensor, Resize
 
-class CustomDataset(Dataset):
-    def __init__(self, dir_imgs, dir_masks, img_size=(720, 1280), Transform=False):
+class UNet_Dataset(Dataset):
+    def __init__(self, root, train=True, transform=None):
         
-        self.dir_imgs = dir_imgs
-        self.img_size = img_size
-        self.dir_masks = dir_masks
-        self.Transform = Transform
+        self.root = root
+        self.transform = transform
+        self.train = train
         
-        # List of images names
-        self.image_arr = os.listdir(self.dir_imgs)
-        # List of images masks
-        self.mask_arr = os.listdir(self.dir_masks)
-        # Transforms
-        self.to_tensor = torchvision.transforms.ToTensor()
-        self.resize = torchvision.transforms.Resize(img_size)
-        # Dataset lenght
-        self.data_len = len(self.image_arr)
+        if self.train:
+            self.dir_imgs = os.path.join(self.root, 'train', 'images')
+            self.dir_masks = os.path.join(self.root, 'train', 'masks')
+            
+            # List of images names
+            self.image_arr = os.listdir(self.dir_imgs)
+            # List of images masks
+            self.mask_arr = os.listdir(self.dir_masks)
+        else:
+            self.dir_imgs = os.path.join(self.root, 'test', 'images')
+            self.dir_masks = os.path.join(self.root, 'test', 'masks')
+            
+            self.image_arr = os.listdir(self.dir_imgs)
+            self.mask_arr = os.listdir(self.dir_masks)
 
     def __getitem__(self, index):
 
@@ -29,19 +34,28 @@ class CustomDataset(Dataset):
         single_image_mask_name = self.mask_arr[index]
         
         # Open image and mask
-        img_as_img = Image.open(os.path.join(self.dir_imgs, single_image_name))
-        mask_as_img = Image.open(os.path.join(self.dir_masks, single_image_mask_name))
+        img = Image.open(os.path.join(self.dir_imgs, single_image_name))
+        mask = Image.open(os.path.join(self.dir_masks, single_image_mask_name))
 
-        if self.Transform:
-            # Transform image and mask to tensor
-            img_as_img = self.resize(img_as_img)
-            mask_as_img = self.resize(mask_as_img)
+        if self.transform is not None:
+            for transf in self.transform:
+                # Transform image and mask
+                img = transf(img)
+                mask = transf(mask)
 
-        img_as_tensor = self.to_tensor(img_as_img)
-        mask_as_tensor = self.to_tensor(mask_as_img)
-
-        return (img_as_tensor, mask_as_tensor)
+        return img, mask
 
     def __len__(self):
         # Total dataset size
-        return self.data_len
+        return len(self.image_arr)
+
+    def __repr__(self):
+        fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
+        fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
+        tmp = 'train' if self.train is True else 'test'
+        fmt_str += '    Split: {}\n'.format(tmp)
+        fmt_str += '    Root Location: {}\n'.format(self.root)
+        tmp = '    Transforms (if any): '
+        fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
+    
+        return fmt_str
